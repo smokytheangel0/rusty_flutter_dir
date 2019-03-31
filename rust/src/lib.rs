@@ -68,7 +68,8 @@ pub extern "C" fn rusted(function_pointer: *const c_char, argument_pointer: *con
 
 }
 
-/// Java Interface
+// Java Interface
+// https://github.com/dart-lang/sdk/projects/13#card-16918592
 #[cfg(target_os="android")]
 #[allow(non_snake_case)]
 pub mod android {
