@@ -5,7 +5,6 @@ set -euo pipefail
 # Build the rust project.
 cd rust
 cargo clean
-cargo test
 
 cargo lipo --release
 cargo build --target aarch64-linux-android --release
