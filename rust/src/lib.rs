@@ -127,7 +127,7 @@ fn search_storage(data: &String) -> FlutterResult {
 
     let arguments: Arguments = match serde_json::from_str(&data) {
         Ok(data) => data,
-        Err(err) => return FlutterResult!{"Err", format!("failed to parse arguments\n, {}", err)}
+        Err(err) => return FlutterResult!{"Err()", format!("failed to parse arguments\n, {}", err)}
     };
 
     let storage = match Connection::open(format!("{}/test.db", arguments.path)) {
