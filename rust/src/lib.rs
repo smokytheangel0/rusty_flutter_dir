@@ -2,15 +2,18 @@ use std::os::raw::c_char;
 use std::ffi::CStr;
 use std::ffi::CString;
 use std::env;
-use std::any::Any;
 use std::fs::File;
 use std::fs;
 use std::collections::VecDeque;
+use std::any::{Any, TypeId};
+use std::boxed::Box;
 
 
 extern crate rusqlite;
 
 use rusqlite::{Connection, NO_PARAMS, MappedRows, Row, params, ToSql};
+use rusqlite::types::ToSqlOutput;
+use rusqlite::types::Value as SqlValue;
 
 #[macro_use]
 extern crate serial_test_derive;
@@ -19,16 +22,21 @@ use serial_test_derive::serial;
 
 #[macro_use]
 extern crate serde_derive;
+extern crate serde_json;
 extern crate serde;
-//on rust 1.33 not sure why the boss is making me use externs
+use serde_json::Value;
 use serde::{Deserialize, Serialize};
 
-//needs a database helper class in the java at least, it seems unrestricted db creation is a nono on mobile
+//TODO
+//conquer dynamic crate and allow multityped rows
+//possibly using type_info to wrangle out specific types
+//clean up interfaces with FlutterResults
+
 fn store(data: &String) -> FlutterResult {
     #[derive(Deserialize)]
     struct Arguments {
         table: String,
-        data: Vec<String>,
+        data: Vec<Value>,
         path: String
     }
 
@@ -56,13 +64,47 @@ fn store(data: &String) -> FlutterResult {
         Err(err) => return FlutterResult!{"Err()", format!("failed to open connection to db: {:?}", err)}
     };
 
+    let mut column_values: Vec<SqlValue> = vec![];
+    //parse out input value types and construct a string containing them and \""'s
+    for value in 0..arguments.data.len() {
+        if arguments.data[value].is_string() {
+            match arguments.data[value].as_str() {
+                Some(string) => column_values.push(SqlValue::Text(string.to_owned())),
+                None => return FlutterResult!{"Err()", format!("impossible input value at position {}: {:?}", value, arguments.data[value])}
+            }
+        } else if arguments.data[value].is_i64() {
+            match arguments.data[value].as_i64() {
+                Some(int) => column_values.push(SqlValue::Integer(int)),
+                None => return FlutterResult!{"Err()", format!("impossible input value at position {}: {:?}", value, arguments.data[value])}
+            }
+        } else if arguments.data[value].is_f64() {
+            match arguments.data[value].as_f64() {
+                Some(float) => column_values.push(SqlValue::Real(float)),
+                None => return FlutterResult!{"Err()", format!("impossible input value at position {}: {:?}", value, arguments.data[value])}
+            }
+        } else {
+            return FlutterResult!("Err()", format!("the only types accepted for storage right now are String, Floating Point and Integer"))
+        }
+    }
 
-    let mut statement = match storage.prepare(&format!("INSERT INTO {} ({}) VALUES (?1)", arguments.table, columns.join(","))){
+    //create question mark string according to how many values are present
+    let mut interro_string = "".to_owned();
+    for number in 0..columns.len() {
+        if number != 0 {
+            interro_string = format!("{}, ?{}", interro_string, number + 1).to_owned();
+        } else {
+            interro_string = "?1".to_owned();
+        }
+    }
+
+    let table_statement = format!("INSERT INTO {} ({}) VALUES ({})", arguments.table, columns.join(","), interro_string);
+
+    let mut statement = match storage.prepare(&table_statement){
         Ok(statement) => statement,
         Err(err) => return FlutterResult!{"Err()", format!("failed to prepare the insertion statment: {:?}", err)}
     };
 
-    match statement.execute(&arguments.data) {
+    match statement.execute(column_values) {
         Ok(_) => (),
         Err(err) => return FlutterResult!{"Err()", format!("failed to write to db: {:?}", err)}
     };
@@ -145,7 +187,7 @@ fn init_storage(data: &String) -> FlutterResult {
         Err(err) => return FlutterResult!{"Err()", format!("failed to open connection to db: {:?}", err)}
     };
     
-    let table_statement = format!("CREATE TABLE IF NOT EXISTS {} ({} TEXT NOT NULL)", arguments.table, arguments.columns);
+    let table_statement = format!("CREATE TABLE IF NOT EXISTS {} ({})", arguments.table, arguments.columns);
 
     match storage.execute(&table_statement, NO_PARAMS) {
         Ok(_) => (),
@@ -233,13 +275,6 @@ fn hello(data: &String) -> FlutterResult {
 struct FlutterResult {
     result: &'static str,
     data: Vec<String>
-}
-
-#[derive(Serialize, Deserialize)]
-enum Untyped {
-    Text(String),
-    Integer(i64),
-    Float(f64)
 }
 
 #[macro_export]
@@ -350,14 +385,17 @@ mod tests {
 
         let this_data = ToInit {
             table: "names".to_string(),
-            columns: "name".to_string(),
+            columns: "name TEXT NOT NULL".to_string(),
             path: path.display().to_string()
         };
 
         let input = serde_json::to_string(&this_data).expect("failed to encode the json string");
 
         let output = init_storage(&input);
-        assert_eq!(output.result, "Ok()");
+        if output.result != "Ok()" {
+            println!("Err(): {:?}", output.data);
+            return Err(());
+        }
 
         #[derive(Serialize)]
         struct ToStore {
@@ -372,10 +410,109 @@ mod tests {
             path: path.display().to_string()
         };
 
-        let mut input = serde_json::to_string(&this_data).expect("failed to encode the json string");
+        let input = serde_json::to_string(&this_data).expect("failed to encode the json string");
         let output = store(&input);
         clean_up_database();
-        assert_eq!(output.result, "Ok()");
+        if output.result != "Ok()" {
+            println!("Err(): {:?}", output.data);
+            return Err(());
+        }
+        Ok(())
+    }
+
+    fn store_many() -> Result<(), ()> {
+        #[derive(Serialize)]
+        struct ToInit {
+            table: String,
+            columns: String,
+            path: String
+        }
+
+        let path = env::current_dir().expect("failed to get current directory");
+
+        let this_data = ToInit {
+            table: "people".to_string(),
+            columns: "name TEXT NOT NULL, birth_month TEXT NOT NULL".to_string(),
+            path: path.display().to_string()
+        };
+
+        let input = serde_json::to_string(&this_data).expect("failed to encode the json string");
+
+        let output = init_storage(&input);
+        if output.result != "Ok()" {
+            println!("Err(): {:?}", output.data);
+            return Err(());
+        }
+
+        #[derive(Serialize)]
+        struct ToStore {
+            table: String,
+            data: Vec<String>,
+            path: String
+        }
+
+        let this_data = ToStore {
+            table: "people".to_string(),
+            data: vec!["Bob".to_string(), "May".to_string()],
+            path: path.display().to_string()
+        };
+
+        let input = serde_json::to_string(&this_data).expect("failed to encode the json string");
+        let output = store(&input);
+        clean_up_database();
+
+        if output.result != "Ok()" {
+            println!("Err(): {:?}", output.data);
+            return Err(());
+        }
+
+        Ok(())
+    }
+
+    fn store_many_different() -> Result<(), ()> {
+        #[derive(Serialize)]
+        struct ToInit {
+            table: String,
+            columns: String,
+            path: String
+        }
+
+        let path = env::current_dir().expect("failed to get current directory");
+
+        let this_data = ToInit {
+            table: "people".to_string(),
+            columns: "name TEXT NOT NULL, birth_day INTEGER NOT NULL".to_string(),
+            path: path.display().to_string()
+        };
+
+        let input = serde_json::to_string(&this_data).expect("failed to encode the json string");
+
+        let output = init_storage(&input);
+        if output.result != "Ok()" {
+            println!("Err(): {:?}", output.data);
+            return Err(());
+        }
+
+/* please edit the associated text file and set path to your own for this test to pass*/
+        //read this in from helper text file
+        /*
+        {
+            "table": "people",
+            "data": ["Bob", 14],
+            "path": "/Users/j/Desktop/Code/rusty_flutter/rust"
+        }
+        */
+        
+        let input = fs::read_to_string("store_many_different.txt").expect("failed to read json input file");        
+        println!("Input: {}", input);
+        let output = store(&input);
+        clean_up_database();
+
+        if output.result != "Ok()" {
+            println!("Err(): {:?}", output.data);
+            return Err(());
+        }
+
         Ok(())
     }
     
@@ -383,6 +520,8 @@ mod tests {
     #[serial(mut_database)]
     fn store_group() {
         store_one().expect("failed to do a succeessful store");
+        store_many().expect("failed to successfully store many of the same type");
+        store_many_different().expect("failed to successfully store many of different types");
     }
 
     fn search_one() -> Result<(),()> {
@@ -397,14 +536,17 @@ mod tests {
 
         let this_data = ToInit {
             table: "names".to_string(),
-            columns: "name".to_string(),
+            columns: "name TEXT NOT NULL".to_string(),
             path: path.display().to_string()
         };
 
         let input = serde_json::to_string(&this_data).expect("failed to encode the json string");
 
         let output = init_storage(&input);
-        assert_eq!(output.result, "Ok()");
+        if output.result != "Ok()" {
+            println!("Err(): {:?}", output.data);
+            return Err(());
+        }
 
         #[derive(Serialize)]
         struct ToStore {
@@ -419,9 +561,12 @@ mod tests {
             path: path.display().to_string()
         };
 
-        let mut input = serde_json::to_string(&this_data).expect("failed to encode the json string");
+        let input = serde_json::to_string(&this_data).expect("failed to encode the json string");
         let output = store(&input);
-        assert_eq!(output.result, "Ok()");
+        if output.result != "Ok()" {
+            println!("Err(): {:?}", output.data);
+            return Err(());
+        }
 
         #[derive(Serialize)]
         struct ToSearch {
@@ -436,9 +581,12 @@ mod tests {
             path: path.display().to_string()
         };
 
-        let mut input = serde_json::to_string(&this_data).expect("failed to encode the json string");
+        let input = serde_json::to_string(&this_data).expect("failed to encode the json string");
         let output = search_storage(&input);
-        assert_eq!(output.result, "Ok()");
+        if output.result != "Ok()" {
+            println!("Err(): {:?}", output.data);
+            return Err(());
+        }
 
         Ok(())
     }
@@ -461,11 +609,11 @@ mod tests {
 
         let this_data = ToInit {
             table: "names".to_string(),
-            columns: "name".to_string(),
+            columns: "name TEXT NOT NULL".to_string(),
             path: path.display().to_string()
         };
 
-        let mut input = serde_json::to_string(&this_data).expect("failed to encode the json string");
+        let input = serde_json::to_string(&this_data).expect("failed to encode the json string");
 
         let output = init_storage(&input);
         clean_up_database();

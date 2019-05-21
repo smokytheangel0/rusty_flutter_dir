@@ -1,0 +1,5 @@
+{
+    "table": "people",
+    "data": ["Bob", 14],
+    "path": "/Users/j/Desktop/Code/rusty_flutter/rust"
+}

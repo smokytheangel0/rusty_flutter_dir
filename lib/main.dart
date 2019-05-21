@@ -37,13 +37,6 @@ class MyHomePageState extends State<MyHomePage> with
 
   TabController controller;
 
-  String _heading = "From Dart:";
-  String method = "";
-  String inputs = "";
-  String fields = "";
-  String output = "no returned value yet";
-  String path = "not set";
-
   @override
   void initState() {
     super.initState();

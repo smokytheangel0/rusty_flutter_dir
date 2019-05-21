@@ -20,7 +20,6 @@ class DBViewState extends State<DBView> {
 
   String _heading = "From Dart:";
   Map output = {"result":"Err()", "data": "no returned value yet"};
-  
 
   Map callRust(method, inputs) {
     DateTime round_trip_start = new DateTime.now();
@@ -74,6 +73,8 @@ class DBViewState extends State<DBView> {
         ),
         Row(
           children: <Widget>[
+            //the offset between message shown (via UI) and message received (via console) tends
+            //to start here or the third button pushed and is accompanied xy
             TestCard(title: "store_one", method: () {              
                 callRust("store", {"table": "names", "data": ["TestCard"]});
               }, padding: 50.0,
