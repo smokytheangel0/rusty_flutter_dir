@@ -65,22 +65,21 @@ fn store(data: &String) -> FlutterResult {
     };
 
     let mut column_values: Vec<SqlValue> = vec![];
-    //parse out input value types and construct a string containing them and \""'s
-    for value in 0..arguments.data.len() {
-        if arguments.data[value].is_string() {
-            match arguments.data[value].as_str() {
+    for value in arguments.data {
+        if value.is_string() {
+            match value.as_str() {
                 Some(string) => column_values.push(SqlValue::Text(string.to_owned())),
-                None => return FlutterResult!{"Err()", format!("impossible input value at position {}: {:?}", value, arguments.data[value])}
+                None => return FlutterResult!{"Err()", format!("impossible input value: {:?}", value)}
             }
-        } else if arguments.data[value].is_i64() {
-            match arguments.data[value].as_i64() {
+        } else if value.is_i64() {
+            match value.as_i64() {
                 Some(int) => column_values.push(SqlValue::Integer(int)),
-                None => return FlutterResult!{"Err()", format!("impossible input value at position {}: {:?}", value, arguments.data[value])}
+                None => return FlutterResult!{"Err()", format!("impossible input value: {:?}", value)}
             }
-        } else if arguments.data[value].is_f64() {
-            match arguments.data[value].as_f64() {
+        } else if value.is_f64() {
+            match value.as_f64() {
                 Some(float) => column_values.push(SqlValue::Real(float)),
-                None => return FlutterResult!{"Err()", format!("impossible input value at position {}: {:?}", value, arguments.data[value])}
+                None => return FlutterResult!{"Err()", format!("impossible input value: {:?}", value)}
             }
         } else {
             return FlutterResult!("Err()", format!("the only types accepted for storage right now are String, Floating Point and Integer"))
