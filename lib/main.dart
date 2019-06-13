@@ -84,7 +84,8 @@ class TestCard extends StatelessWidget {
   final String title;
   final method;
   final padding;
-  final ValueKey key;
+  final Key key;
+
 
   TestCard({this.title, this.method, this.padding, this.key});
   
@@ -104,7 +105,7 @@ class TestCard extends StatelessWidget {
               )
             ),
             onPressed: this.method,
-            key: this.key
+            key: key
           )
         )
       ),       

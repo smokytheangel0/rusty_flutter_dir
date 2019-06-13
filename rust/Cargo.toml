@@ -11,6 +11,7 @@ serde_derive = "1.0.89"
 serde = "1.0.89"
 serial_test = "0.2.0"
 serial_test_derive = "0.2.0"
+chrono = "0.4.6"
 
 
 [dependencies.rusqlite]

@@ -8,6 +8,8 @@ void main() {
       final init_storage_button = find.byValueKey('init_storage_button');
       final store_one_button = find.byValueKey('store_one_button');
       final search_one_button = find.byValueKey('search_one_button');
+      final store_many_strings_button = find.byValueKey('store_many_strings_button');
+      final store_different_button = find.byValueKey('store_different_button');
 
       FlutterDriver driver;
 
@@ -32,9 +34,13 @@ void main() {
       });
 
       test('store_many_strings_test', () async {
+        await driver.tap(store_many_strings_button);
+        expect(await driver.getText(result_text), "Ok()");
       });
 
       test('store_many_different_test', () async {
+        await driver.tap(store_different_button);
+        expect(await driver.getText(result_text), "Ok()");
       });
 
       test('search_one_test', () async {

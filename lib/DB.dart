@@ -3,7 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:path_provider/path_provider.dart';
 import 'dart:convert';
 
-import "./main.dart" show TestCard;
+import "./main.dart";
 class DBView extends StatefulWidget {
   DBView({Key key, this.title}) : super(key: key);
   
@@ -46,9 +46,10 @@ class DBViewState extends State<DBView> {
         print("${round_trip_elapsed.inMicroseconds} microseconds");
 
         print("~~~~~~~~~~~~");
-        return output;
       });      
     });
+    setState((){});
+    return output;
   }
 
   @override
@@ -89,18 +90,41 @@ class DBViewState extends State<DBView> {
 
         Row(
           children: <Widget>[
-            TestCard(title: "store_many_strings", padding: 20.0),
+            TestCard(title: "store_many_strings", method: () {
+                callRust("init_storage", {"table": "people0", "columns": "name, birth_month"});
+                callRust("store", {"table": "people0", "data": ["Bob", "May"]});
+              }, padding: 20.0,
+            key: ValueKey("store_many_strings_button")),
 
-            TestCard(title: "search_many_strings", padding: 20.0),
+            TestCard(title: "search_many_strings", method: () {
+                callRust("search_storage", {"query": "SELECT * FROM people0", "data": []});
+              }, padding: 20.0,
+            key: ValueKey("search_many_strings_button")),
           ],
         ),
         Row(
           children: <Widget>[
-            TestCard(title: "store_different", padding: 35.0),
+            TestCard(title: "store_different", method: () {
+                callRust("init_storage", {"table": "people1", "columns": "name, birth_date"});
+                callRust("store", {"table": "people1", "data": ["Tanya", 27]});
+              }, padding: 35.0,
+            key: ValueKey("store_different_button")),
             
-            TestCard(title: "search_different", padding: 35.0),
+            TestCard(title: "search_different", method: () {
+                callRust("search_storage", {"query": "SELECT * FROM people1", "data": []});
+              }, padding: 35.0,
+            key: ValueKey("search_different_button")),
           ],
         ),
+        Row(
+          children: <Widget> [
+            TestCard(title: "storage_columns", method: (){
+                callRust("storage_columns", {"table": "people1"});
+              }, padding: 60.0,
+            key: ValueKey("storages_columns_button"))
+          ]
+        ),
+
         Row(
           children: <Widget> [
             Text(_heading)
@@ -131,4 +155,36 @@ class DBViewState extends State<DBView> {
     );
   }
 }
-//callRust("store", {"table": "name", "data": ["TestCard"]})
+
+class TestCard extends StatelessWidget {
+  final String title;
+  final method;
+  final padding;
+  final Key key;
+
+
+  TestCard({this.title, this.method, this.padding, this.key});
+  
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: EdgeInsets.all(this.padding),
+      child: Card(
+        child: Ink(
+          child: FlatButton(
+            child: Text(this.title,
+              style: TextStyle(
+                fontWeight: FontWeight.bold,
+                fontFamily: "OpenSans",
+                fontSize: 12
+              )
+            ),
+            onPressed: this.method,
+            key: key
+          )
+        )
+      ),       
+    );
+  }
+}
